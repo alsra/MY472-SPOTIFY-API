@@ -1,8 +1,11 @@
 ---
 title: "Final Assignment"
-author: "Dr Thomas Robinson and Dr Dan de Kadt"
+author: "202338463"
 date: "AT 2023"
 output: html_document
+editor_options: 
+  markdown: 
+    wrap: 72
 ---
 
 ```{r setup, include=FALSE}
@@ -11,6 +14,7 @@ knitr::opts_chunk$set(echo = FALSE) # actually set the global chunk options.
 
 ```{r, include=FALSE}
 library(spotifyr)
+library(tidyr)
 library(dplyr)
 library(httr)
 library(jsonlite)
@@ -18,104 +22,147 @@ library(plotly)
 library(RSelenium)
 library(rvest)
 library(ggplot2)
+library(stringr)
 ```
 
-**INTRODUCTION:**
+The Github repository of this report can be found
+[here](https://github.com/busralb/MY472-Final.git). <br>
 
-This report explores the current state of music of artists listed by Rolling Stone Magazine in 2010 and aims to uncover characteristics illuminating their enduring engagements. The study employs Spotify followers and popularity scores to quantify listener engagement. Additionally, it examines how many artists entered the Billboard Artist 100 Charts throughout the year and their genre distributions. The hypothesis suggests that genre influences popularity, proposing that artists in contemporary genres like rap and rock maintain high engagement, whereas genres like blues and soul, with a limited audience today, are less popular. The study also explores song features of artists, seeking correlations with ongoing popularity despite the 13-year span.
+#### INTRODUCTION:
 
-**DATA:**
+This study explores the current state of the musicians listed in Rolling
+Stone Magazine's 100 greatest artists compilation. It investigates the
+endurance of their engagement by analyzing metrics from Spotify. The
+research quantifies listener engagement using follower counts and
+popularity scores, hypothesizing that genre influences popularity.
+Genres like rap and rock are expected to maintain high engagement, while
+blues and soul, with smaller contemporary audiences, are anticipated to
+be less popular. The study also examines decades and song features,
+seeking correlations with ongoing popularity.
 
-Three primary sources were used for analysis: Rolling Stone's list, Billboard Charts, and the Spotify Web API.
+<br>
 
-Rolling Stone's compilation, forming the basis of the study, was collected in segments due to the dynamic loading of the website. After the top 50 were loaded, the top 50 were scraped by simulating clicks on the 50-41 ranking range in RSelenium, and then these datasets were combined in 'greatest_100' .
+#### DATA:
 
-Billboard ranks artists based on popularity metrics like sales, streaming, and media presence. To assess the current popularity of artists on Rolling Stone magazine, I found it useful to examine how many artists have made these lists through 2023 and designed 'get_billboard_data' to extract chart data. Notably, Billboard publishes charts weekly rather than monthly, leading me to specifically extract data from the 3rd week of each month as representative. Utilizing another helper function and a for loop, common artists with the Rolling Stone ranking are gathered.
+The study utilizes data from four sources: 
 
-The Spotifyr package's detailed functions prompted defining new refined functions for Spotify API access. The 'get_artist_info' retrieves genres, popularity, and total followers. Applied to 'greatest_100' with a for loop and an if statement for naming inconsistencies, sub-genres are grouped for clarity. The 'get_artist_id' helper function used with 'get_artist_audio_features', calculating track feature averages. A bug arose for Neil Young, lacking Spotify albums, addressed by averaging features of singles.
+Rolling Stone’s compilation was collected in segments due to the dynamic loading of the website.
+After the top 50 were loaded, the top 50 were scraped by simulating
+clicks on the 50-41 ranking range, and then these datasets were combined
+in ‘greatest_100’.
 
-After data processing, four primary analysis datasets were generated:
+While Spotifyr package provides convenient access to the Spotify API,
+additional functions were created to manage the API rate limit
+effectively. Specifically, the 'get_artist_info' is applied to the
+'greatest_100' using for loop to extract genres, popularity and follower
+counts. To address inconsistencies in names, an 'if' expression was
+employed. Sub-genres were grouped under main headings, and artists with
+multiple affiliations were categorized based on the most prominent. To
+calculate average feature values for tracks, the
+'get_artist_audio_features' function from Spotifyr package is utilized
+in sequence to not exceed the rate.
 
-- 'greatest_100_info': Contains artists' names, genres, popularity scores, followers, and Rolling Stone rankings.
-- 'features_vs_popularity' or 'not_in_billboard_features': Includes average values of artists' music features, categorized based on Billboard inclusion.
-- 'billboard_artists': Names and genres of artists appearing in both Billboard Charts and Rolling Stone rankings.
+As the API does not offer data regarding decades, the artists' active
+years are scrapped from the All Media site. Then it was subsequently
+processed using regular expressions, and was added to the
+'greatest_100_info' as a column indicating the debut year of each
+artist.
+
+To evaluate the present popularity of artists featured in Rolling Stone
+magazine, how many artists appeared on Billboard Artist chart throughout
+2023 was tracked. It's worth noting that Billboard releases weekly
+charts rather than monthly ones. Thus, data was specifically extracted
+from the 3rd week of each month as representative. Also a helper
+function and for loop were employed to compile the artists commonly
+present in the Rolling Stone and Billboard rankings.
+
+After data processing, three primary analysis datasets were generated:
+
+‘greatest_100_info’: Contains artists’ names, genres, popularity scores,
+followers, decades, and magazine rankings. ‘features_vs_popularity’:
+Includes average values of artists’ music features. ‘billboard_artists’:
+Subset of ‘greatest_100_info’ for artists in Billboard rankings.
+
+<br> <br>
 
 ```{r, include=FALSE, cache = TRUE}
+## Scrape the Rolling Stone's Compilation of the 100 greatest artists
 # Start the Selenium server
-#rD <- rsDriver(browser = "firefox", verbose = FALSE, port = netstat::free_port(random = TRUE), chromever = NULL)
-#driver <- rD[["client"]]
+rD <- rsDriver(browser = "firefox", verbose = FALSE, port = netstat::free_port(random = TRUE), chromever = NULL)
+driver <- rD[["client"]]
 
 # Specify the URL of the Rolling Stone page
-#rank_url <- "https://www.rollingstone.com/music/music-lists/100-greatest-artists-147446/"
-#driver$navigate(rank_url)
+rank_url <- "https://www.rollingstone.com/music/music-lists/100-greatest-artists-147446/"
+driver$navigate(rank_url)
 
 # Find the "Reject All" button and click it
-#reject_button <- driver$findElement(using = "css", value = "#onetrust-reject-all-handler")
-#reject_button$clickElement()
+reject_button <- driver$findElement(using = "css", value = "#onetrust-reject-all-handler")
+reject_button$clickElement()
 
 # Extract the HTML content of the entire page
-#page_source <- driver$getPageSource()
+page_source <- driver$getPageSource()
 
 # Parse the HTML content with rvest
-#page <- read_html(page_source[[1]])
+page <- read_html(page_source[[1]])
 
 # Extract rank and name information
-#rank_elements <- page %>% html_nodes("span.c-gallery-vertical-album__number")
-#name_elements <- page %>% html_nodes("h2.c-gallery-vertical-album__title")
+rank_elements <- page %>% html_nodes("span.c-gallery-vertical-album__number")
+name_elements <- page %>% html_nodes("h2.c-gallery-vertical-album__title")
 
 # Extract text from HTML nodes
-#ranks <- html_text(rank_elements)
-#names <- html_text(name_elements)
+ranks <- html_text(rank_elements)
+names <- html_text(name_elements)
 
 # Create a data frame with rank and name
-#artists_data <- data.frame(
-#  rank = as.integer(ranks),
-#  name = names,
-#  stringsAsFactors = FALSE
-#)
+artists_data <- data.frame(
+  rank = as.integer(ranks),
+  name = names,
+  stringsAsFactors = FALSE
+)
 
-#webElem <- driver$findElement("css", "body")
-#webElem$sendKeysToElement(list(key = "end"))
+webElem <- driver$findElement("css", "body")
+webElem$sendKeysToElement(list(key = "end"))
 
 # Wait for some time to let the page load
-#Sys.sleep(5)
+Sys.sleep(5)
 
 # Click on the "50 - 41" link to load the next set of artists
-#driver$findElement(using = "link text", value = "50 - 41")$clickElement()
+driver$findElement(using = "link text", value = "50 - 41")$clickElement()
 
 # Wait for some time after clicking to allow content to load
-#Sys.sleep(5)
+Sys.sleep(5)
 
 # Extract the HTML content of the page after clicking
-#page_source_next <- driver$getPageSource()
+page_source_next <- driver$getPageSource()
 
 # Parse the HTML content with rvest for the next set of artists
-#page_next <- read_html(page_source_next[[1]])
+page_next <- read_html(page_source_next[[1]])
 
 # Extract rank and name information for the next set of artists
-#rank_elements_next <- page_next %>% html_nodes("span.c-gallery-vertical-album__number")
-#name_elements_next <- page_next %>% html_nodes("h2.c-gallery-vertical-album__title")
+rank_elements_next <- page_next %>% html_nodes("span.c-gallery-vertical-album__number")
+name_elements_next <- page_next %>% html_nodes("h2.c-gallery-vertical-album__title")
 
 # Extract text from HTML nodes for the next set of artists
-#ranks_next <- html_text(rank_elements_next)
-#names_next <- html_text(name_elements_next)
+ranks_next <- html_text(rank_elements_next)
+names_next <- html_text(name_elements_next)
 
 # Create a data frame for the next set of artists
-#artists_data_next <- data.frame(
-#  rank = as.integer(ranks_next),
-#  name = names_next,
-#  stringsAsFactors = FALSE
-#)
+artists_data_next <- data.frame(
+  rank = as.integer(ranks_next),
+  name = names_next,
+  stringsAsFactors = FALSE
+)
+
 # Close the RSelenium server
-#rD[["server"]]$stop()
+rD[["server"]]$stop()
 
 # Merge the data frames using rbind
-#greatest_100 <- rbind(artists_data, artists_data_next)
-#write.csv(greatest_100, file = "greatest_100.csv", row.names = FALSE)
-greatest_100 <- read.csv("greatest_100.csv")
+greatest_100 <- rbind(artists_data, artists_data_next)
 ```
 
-```{r,, include=FALSE, cache = TRUE}
+```{r, include=FALSE, cache = TRUE}
+## Define functions to use to access Spotify API and with spotifyr package
+# Read the API KEY
 readRenviron("~/Desktop/myenvs/spotify.env")
 
 apikey <- Sys.getenv("SPOTIFY_CLIENT_SECRET")
@@ -202,9 +249,15 @@ function(artist_id, country_code = "US") {
   return(tracks_df)
 }
 ```
-**ANALYSIS:**
 
-```{r, cache = TRUE}
+### ANALYSIS:
+
+[**Fig.1:** *The graph depicts Spotify popularity scores of artists with
+their corresponding ranks. Each bubble is color-coded based on genre,
+and the size is determined by the follower count on
+Spotify.*]{style="display: block; text-align: center; font-size: small;"}
+
+```{r, out.width='100%', fig.align='center'}
 # Create an empty list to store the results
 artist_info_list <- list()
 
@@ -233,24 +286,25 @@ for (i in 1:nrow(greatest_100)) {
 # Convert the list of data frames to a single data frame
 greatest_100_info <- do.call(rbind, artist_info_list)
 
-
-
+# Group genres under main headings 
 greatest_100_info <- greatest_100_info %>%
   mutate(genres = case_when(
-    grepl("reggae", tolower(genres)) ~ "reggae",
     grepl("hip-hop", tolower(genres)) | grepl("hip hop", tolower(genres)) | grepl("rap", tolower(genres)) ~ "rap",
     grepl("rock", tolower(genres)) | grepl("punk", tolower(genres)) ~ "rock",
     grepl("blues", tolower(genres)) ~ "blues",
     grepl("soul", tolower(genres)) | grepl("motown", tolower(genres)) ~ "soul",
-    grepl("pop", tolower(genres)) ~ "pop",
+    grepl("pop", tolower(genres)) | grepl("reggae", tolower(genres))  ~ "pop",
+    grepl("country", tolower(genres)) ~ "country",
+    grepl("reggae", tolower(genres)) ~ "reggae",
     TRUE ~ genres
   )) %>%  
+  
 mutate(genres = ifelse(name == "Muddy Waters", "blues", genres),
          genres = ifelse(name == "The Drifters", "blues", genres),
+         genres = ifelse(name == "Fats Domino", "blues", genres),
          genres = ifelse(name == "The Shirelles", "soul", genres),
          genres = ifelse(name == "Jackie Wilson", "soul", genres),
          genres = ifelse(name == "Michael Jackson", "pop", genres))
-
 
 greatest_100_info$popularity <- as.numeric(greatest_100_info$popularity)
 
@@ -283,10 +337,292 @@ popularity_vs_genre <- plot_ly(
     showlegend = TRUE
   )
 
-# Show the chart
+# Show the bubble chart
 popularity_vs_genre
 ```
 
+Spotify provides popularity score for artists, based on the average of
+plays and how recent those plays are. This combined with follower
+counts, offer insights into listener engagement. The clustering of
+artists in the 50-85 popularity range suggests sustained interest in
+their music. Notably, artists with rap songs, positioned towards the end
+of the list, have higher average popularity scores, with Eminem leading.
+Rock artists have an average popularity score of approximately 68.38,
+while soul, blues, and country artists are among the least popular by
+the end of 2023.
+
+```{r}
+# Function to navigate to the URL and accept cookies
+#navigate_and_accept_cookies <- function() {
+#  # Initialize the RSelenium driver
+#  rD <- rsDriver(browser = "firefox", verbose = FALSE, port = netstat::free_port(random = TRUE), chromever = NULL)
+#  driver <- rD[["client"]]
+#  # Navigate to the AllMusic search page
+#  driver$navigate("https://www.allmusic.com/search/all/")
+  
+#  # Wait for 1 second before clicking the "AGREE" button
+#  Sys.sleep(1)
+  
+#  agree_button <- driver$findElement(using = "css selector", value = ".fc-cta-consent")
+  
+#  # Click the "AGREE" button
+#  agree_button$clickElement()
+#  return(driver)
+#}
+
+# Function to scrape artist decades
+#scrape_artist_decades <- function(driver, artist_name) {
+#  # Find the search input field by its CSS selector and enter the artist name
+#  search_input <- driver$findElement(using = "css selector", value = ".siteSearchInput")
+#  search_input$sendKeysToElement(list(artist_name))
+  
+#  # Find and click the search button
+# search_button <- driver$findElement(using = "css selector", value = ".siteSearchButton")
+#  search_button$clickElement()
+  
+#  if (artist_name == "Diana Ross & The Supremes") {
+#    # Find and click the specified artist filter
+#   element_to_click <- driver$findElement(using = "css selector", value = ".filter > div:nth-child(2) > h3:nth-child(1) > a:nth-child(1)")
+#    element_to_click$clickElement()
+#  }
+  
+#  # Find the artist info section by its CSS selector
+#  artist_info <- driver$findElement(using = "css selector", value = "div.artist:nth-child(2) > div:nth-child(1)")
+  
+#  # Extract the decades
+#  decades <- artist_info$findElement(using = "css selector", value = "div.artist:nth-child(2) > div:nth-child(1) > div:nth-child(4)")
+#  decades_text <- decades$getElementText()[[1]] %>%
+#                                 str_replace("^.*\\n", "")
+#  return(decades_text)
+#}
+
+# Initialize the RSelenium driver and accept cookies
+#driver <- navigate_and_accept_cookies()
+
+# List of artist names
+#artist_names <- greatest_100_info$name
+
+# Create an empty tibble to store the data
+#artists_decades <- tibble(
+#  name = character(0),
+#  decade = character(0)
+#)
+#
+# Loop through artist names and scrape their decades
+#for (artist_name in artist_names) {
+#  decades <- scrape_artist_decades(driver, artist_name)
+#  artists_decades <- artists_decades %>% 
+#    add_row(name = artist_name, decade = decades)
+#}
+# Close the driver when done
+#driver$close()
+
+#artists_decades <- artists_decades %>%
+#  mutate(decade = str_extract(decade, "\\d{4}s"))
+
+# Write artists_decades to the csv
+# write.csv(artists_decades, "artist_decades.csv")
+```
+
+```{r, cache=TRUE}
+# Read artists_decades
+artists_decades <- read.csv("artist_decades.csv")
+greatest_100_info <- greatest_100_info %>%
+  left_join(select(artists_decades, name, decade), by = "name")
+
+popularity_vs_decade <- plot_ly(data = greatest_100_info, x = ~decade, y = ~popularity) %>%
+                 add_boxplot(marker = list(color = 'lightgray'), showlegend = FALSE) %>%
+                 add_trace(x = ~decade, y = ~popularity, type = 'scatter', mode = 'markers',
+                           marker = list(size = 10), text = ~name, hoverinfo = 'text', name = "Artists") %>%
+                 layout(title = "Popularity Distribution by Decade",
+                        xaxis = list(title = "Decade"),
+                        yaxis = list(title = "Popularity"))
+popularity_vs_decade
+# Calculate mean popularity for each decade
+mean_popularity_by_decade <- greatest_100_info %>%
+  group_by(decade) %>%
+  summarize(mean_popularity = mean(popularity, na.rm = TRUE))
+```
+[**Fig.2:** *The box plot shows the popularity range of artists grouped by decade.*]{style="display: block; text-align: center; font-size: small;"}
+
+When examining the popularity of artists in 2023 based on the decade in
+which they began their music careers, certain trends emerge. While the
+magazine compilation includes a larger number of artists who started
+their music careers in the 1960s and 1970s, it is generally observed
+that artists tend to become more popular as their debut dates get closer
+to the present. However, there is also an observation that rock artists
+who initiated their music careers in the 1960s continue to maintain
+their popularity in 2023.
+
+```{r}
+# To be commented 
+# unique_common_artists <- unique_common_artists[unique_common_artists != "Neil Young"]
+
+# Create an empty data frame to store the mean values
+# mean_values_df <- data.frame()
+
+# Loop through unique_common_artists and calculate mean values
+# for (i in seq_along(unique_common_artists)) {
+#   artist_id <- get_artist_id(unique_common_artists[i])
+  
+#   if (unique_common_artists[i] != '6v8FB84lnmJs434UJf2Mrm') {
+#     artist_features <- spotifyr::get_artist_audio_features(artist_id) %>%
+#       select(artist_name, danceability, energy, loudness, speechiness, acousticness, instrumentalness, tempo)
+    
+#     mean_values <- artist_features %>%
+#       summarise(across(where(is.numeric), mean))
+    
+#     # Add artist_name to mean_values
+#     mean_values$artist_name <- unique_common_artists[i]
+    
+#     # Bind the result to the mean_values_df
+#     mean_values_df <- bind_rows(mean_values_df, mean_values)}
+# }
+
+#neil_tracks <- get_artist_top_tracks(get_artist_id("neil young"))
+#for (id in neil_tracks$id){
+#   artist_feature <- get_track_audio_features(id) %>%
+#     select(danceability, energy, loudness, speechiness, acousticness, instrumentalness, tempo)
+#   mean_values <- artist_feature %>%
+#       summarise(across(where(is.numeric), mean))
+#   mean_values$artist_name <- "Neil Young"
+# }
+# mean_full <- bind_rows(mean_values_df, mean_values)
+# features_vs_popularity <- left_join(mean_full, select(greatest_100_info, name, popularity), by = c("artist_name" = "name"))
+# Write features_vs_popularity to a CSV file
+# write.csv(features_vs_popularity, "features_vs_popularity.csv", row.names = FALSE)
+
+#not_in_billboard <- greatest_100_info$name[!(greatest_100_info$name %in% unique_common_artists)]
+
+# Create an empty data frame to store the mean values
+#mean_values_df <- data.frame()
+
+# Loop through not_in_billboard and calculate mean values
+#for (i in seq_along(not_in_billboard)) {
+  #artist_id <- get_artist_id(not_in_billboard[i])
+#  if (not_in_billboard[i] != '6v8FB84lnmJs434UJf2Mrm') {
+#  artist_features <- spotifyr::get_artist_audio_features(artist_id) %>%
+#    select(artist_name, danceability, energy, loudness, speechiness, acousticness, instrumentalness, tempo)
+  
+#  mean_values <- artist_features %>%
+#    summarise(across(where(is.numeric), mean))
+  
+  # Add artist_name to mean_values
+#  mean_values$artist_name <- not_in_billboard[i]
+  
+  # Bind the result to the mean_values_df
+#  mean_values_df <- bind_rows(mean_values_df, mean_values)
+#  }}
+#not_in_billboard_features <- left_join(mean_values_df, select(greatest_100_info, name, popularity), by = c("artist_name" = "name"))
+#not_in_billboard_features$genre <- greatest_100_info$genres[greatest_100_info$name %in% not_in_billboard_features$artist_name]
+#not_in_billboard_features <- not_in_billboard_features %>%
+#select("artist_name", "popularity", "genre", everything())
+#features_vs_popularity$genre <- greatest_100_info$genres[greatest_100_info$name %in% features_vs_popularity$artist_name]
+#features_vs_popularity <- features_vs_popularity %>%
+#select("artist_name", "popularity", "genre", everything())
+#write.csv(not_in_billboard_features, "not_in_billboard_features.csv", row.names = FALSE)
+```
+
+```{r}
+# Read the CSV files
+in_billboard_features <- read.csv("features_vs_popularity.csv")
+in_billboard_features$genre <- greatest_100_info$genres[greatest_100_info$name %in% in_billboard_features$artist_name]
+in_billboard_features <- in_billboard_features %>%
+select("artist_name", "popularity", "genre", everything())
+not_in_billboard_features <- read.csv("not_in_billboard_features.csv")
+
+# Drop 'genre' column from both data frames
+in_billboard_features <- in_billboard_features[, !(colnames(in_billboard_features) %in% c("genre", "X"))]
+not_in_billboard_features <- not_in_billboard_features[, !colnames(not_in_billboard_features) %in% "genre"]
+
+features_vs_popularity <- rbind(in_billboard_features, not_in_billboard_features)
+```
+
+Lyrically rich songs attract more listeners with a moderate correlation.
+Faster tempo songs have lower popularity, with a weak correlation.
+Energetic tracks with a fast, loud feel are more popular, despite a very
+low correlation. Danceability doesn't show a clear correlation, with
+highly danceable songs not necessarily being more popular, and less
+danceable songs still achieving significant popularity. Thus, a
+song's popularity is primarily influenced by its decade and genre rather
+than specific Spotify metrics. 
+
+[**Fig.3-7:** *Graphs illustrate correlations between artists'
+popularity change and mean levels of speechiness, tempo, energy, and
+danceability in their
+songs.*]{style="display: block; text-align: center; font-size: small;"}
+
+```{r, fig.width=6, fig.height=4, out.width='100%', fig.align='center'}
+# Function to create a scatter plot with polynomial regression
+create_feature_plot <- function(data, feature, title_suffix) {
+  # Sort the data by the specified feature
+  sorted_data <- data[order(data[[feature]]), ]
+  
+  # Create a scatter plot for the specified feature
+  feature_plot <- plot_ly(sorted_data, 
+                         x = ~get(feature), 
+                         y = ~popularity, 
+                         text = ~artist_name, 
+                         type = "scatter", 
+                         mode = "markers", 
+                         marker = list(size = 10), 
+                         name = "Actual",
+                         showlegend = FALSE)
+
+  # Fit a quadratic polynomial regression model for the specified feature
+  poly_model_feature <- lm(popularity ~ poly(sorted_data[[feature]], 2), data = sorted_data)
+  
+  # Generate predicted values from the polynomial model for the specified feature
+  predicted_values_feature <- predict(poly_model_feature, data.frame(energy = sorted_data[[feature]]))
+  
+  # Add polynomial regression line to the plot for the specified feature
+  feature_plot <- feature_plot %>% 
+    add_trace(x = sorted_data[[feature]], 
+              y = predicted_values_feature, 
+              type = "scatter", 
+              mode = 'lines+markers', 
+              line = list(color = "blue"), 
+              name = paste("Predicted", tools::toTitleCase(feature)))
+
+  # Customize layout for the plot
+  layout <- list(xaxis = list(title = tools::toTitleCase(feature)),
+                 yaxis = list(title = "Popularity"))
+  
+  # Apply the layout
+  feature_plot <- feature_plot %>% layout(layout)
+  
+  return(feature_plot)
+}
+
+# Create plot the "speechiness" feature
+speechiness_vs_pop <- create_feature_plot(features_vs_popularity, "speechiness")%>% layout(title = "Popularity Trends Across Song Speechiness Level" , xaxis = list(title = "Speechiness"), yaxis = list(title = "Popularity"))
+```
+
+```{r, fig.width=6, fig.height=4, out.width='100%', fig.align='center'}
+
+# Show the plot
+speechiness_vs_pop
+
+# Create plot the "tempo" feature
+tempo_vs_pop <- create_feature_plot(features_vs_popularity, "tempo")%>% layout(title = "Popularity Trends Across Song Tempo Level" , xaxis = list(title = "Tempo"), yaxis = list(title = "Popularity"))
+
+# Show the plot
+tempo_vs_pop
+```
+
+```{r, fig.width=6, fig.height=4, out.width='100%', fig.align='center'}
+# Create plot the "energy" feature
+energy_vs_pop <- create_feature_plot(features_vs_popularity, "energy", "Billboard") %>% layout(title = "Popularity Trends Across Song Energy Levels" , xaxis = list(title = "Energy"), yaxis = list(title = "Popularity"))
+
+energy_vs_pop
+# Create plot for the "danceability" feature
+danceability_vs_pop <- create_feature_plot(features_vs_popularity, "danceability") %>% 
+  layout(title = "Popularity Trends Across Song Danceability Levels", 
+         xaxis = list(title = "Danceability"), 
+         yaxis = list(title = "Popularity"))
+
+danceability_vs_pop
+```
 
 ```{r, cache =TRUE}
 # Function to retrieve Billboard data
@@ -387,16 +723,8 @@ greatest_vs_billboard <- plot_ly(billboard_artist_counts , x = ~Month, y = ~Coun
   yaxis = list(range = c(0, max(common_counts) + 1)),
   title = list(text = "The Artists who entered the Billboard Chart in 2023", font = list(size = 16), yanchor = "top", y = 0.95)
 )
-
 greatest_vs_billboard
 ```
-
-<center><span style="color:black">The graph illustrates the number of artists featured in the Billboard Artist 100 Chart.
-
-(Data is extracted from the chart of the third week of each month.).</span></center>
-
-
-
 ```{r}
 # Initialize an empty vector to store unique common artists
  unique_common_artists <- character(0)
@@ -408,231 +736,51 @@ greatest_vs_billboard
 }
 
 # Convert to a data frame
-billboard_artists <- data.frame(artist = unique_common_artists, stringsAsFactors = FALSE)
-billboard_artists$genre <- greatest_100_info$genres[match(billboard_artists$artist, greatest_100_info$name)]
+billboard_artists <- data.frame(artist = unique_common_artists, stringsAsFactors = FALSE) %>%
+                    left_join(greatest_100_info, by = c("artist" = "name"))
 
+decade_counts <- billboard_artists %>%
+  group_by(decade) %>%
+  summarize(count = n())
 
-# Calculate genre counts for greatest_100_info
-genre_counts_greatest <- greatest_100_info %>%
-  group_by(genres) %>%
-  summarise(count = n()) %>%
-  rename(genre = genres)
 genre_counts_billboard <- billboard_artists %>%
-  group_by(genre) %>%
-  summarise(count = n(), artists = paste(artist, collapse = "<br>"))
-
-# Combine genre_counts_billboard and genre_counts_greatest
-combined_genre_count <- merge(genre_counts_billboard, genre_counts_greatest, by = "genre", all.x = TRUE)
-
-# Calculate proportion
-combined_genre_count$proportion <- combined_genre_count$count.x / combined_genre_count$count.y * 100
-
-# Create a ggplot bar plot
-gg_bar <- ggplot(combined_genre_count, aes(x = genre, y = proportion, fill = genre, text = paste("Proportion: ", scales::percent(proportion / 100),
-                                                                                                  "<br>Count: ", count.x,
-                                                                                                  "<br>Artists: ", artists))) +
-  geom_bar(stat = "identity") +
-  labs(title = "Genre Distribution for Billboard Artists",
-       x = "Genre",
-       y = "Proportion") +
-  scale_y_continuous(labels = scales::percent_format(scale = 1)) +
-  theme_minimal() +
-  theme(plot.title = element_text(hjust = 0.5)) 
-
-# Convert ggplot to Plotly
-combined_genre_dist <- ggplotly(gg_bar, tooltip = "text")
-
-# Display the plot
-combined_genre_dist
+  group_by(genres) %>%
+  summarise(count = n())
 ```
 
-```{r}
-# To be commented 
-# unique_common_artists <- unique_common_artists[unique_common_artists != "Neil Young"]
+[**Fig.8:** *The line graph illustrates the number of artists featured
+in the Billboard Artist 100 Chart. (Data is extracted from the third
+week of each
+month.)*]{style="display: block; text-align: center; font-size: small;"}
 
-# Create an empty data frame to store the mean values
-# mean_values_df <- data.frame()
+<br>
 
-# Loop through unique_common_artists and calculate mean values
-# for (i in seq_along(unique_common_artists)) {
-#   artist_id <- get_artist_id(unique_common_artists[i])
-  
-#   if (unique_common_artists[i] != '6v8FB84lnmJs434UJf2Mrm') {
-#     artist_features <- spotifyr::get_artist_audio_features(artist_id) %>%
-#       select(artist_name, danceability, energy, loudness, speechiness, acousticness, instrumentalness, tempo)
-    
-#     mean_values <- artist_features %>%
-#       summarise(across(where(is.numeric), mean))
-    
-#     # Add artist_name to mean_values
-#     mean_values$artist_name <- unique_common_artists[i]
-    
-#     # Bind the result to the mean_values_df
-#     mean_values_df <- bind_rows(mean_values_df, mean_values)}
-# }
+Billboard Artist 100 charts reveal insights into artists' endurance.
+Despite monthly fluctuations, only 24 artists consistently appeared
+throughout 2023. Reviewing artists on the Billboard list, mostly artists from more latter decades and rock artists
+debuted in 60s are present in the list in line with the analysis. However, country and blues
+artists struggle to gain entry.  
 
-# neil_tracks <- get_artist_top_tracks(get_artist_id("neil young"))
-# for (id in neil_tracks$id){
-#   artist_feature <- get_track_audio_features(id) %>%
-#     select(danceability, energy, loudness, speechiness, acousticness, instrumentalness, tempo)
-#   mean_values <- artist_feature %>%
-#       summarise(across(where(is.numeric), mean))
-#   mean_values$artist_name <- "Neil Young"
-# }
+In conclusion, laterly debuted and artists in contemporary genres such as rock and rap maintain higher popularity levels. Additionally, songs with more lyrics contribute to increased popularity in 2023. Richly lyrical songs also contribute to increased popularity in 2023. 
 
-# mean_full <- bind_rows(mean_values_df, mean_values)
-# features_vs_popularity <- left_join(mean_full, select(greatest_100_info, name, popularity), by = c("artist_name" = "name"))
-# Write features_vs_popularity to a CSV file
-# write.csv(features_vs_popularity, "features_vs_popularity.csv", row.names = FALSE)
 
-#not_in_billboard <- greatest_100_info$name[!(greatest_100_info$name %in% unique_common_artists)]
+<center>[**BIBLIOGRAPHY**]{style="color:black"}</center>
 
-# Create an empty data frame to store the mean values
-#mean_values_df <- data.frame()
+<br>
 
-# Loop through not_in_billboard and calculate mean values
-#for (i in seq_along(not_in_billboard)) {
-  #artist_id <- get_artist_id(not_in_billboard[i])
-#  if (not_in_billboard[i] != '6v8FB84lnmJs434UJf2Mrm') {
-#  artist_features <- spotifyr::get_artist_audio_features(artist_id) %>%
-#    select(artist_name, danceability, energy, loudness, speechiness, acousticness, instrumentalness, tempo)
-  
-#  mean_values <- artist_features %>%
-#    summarise(across(where(is.numeric), mean))
-  
-  # Add artist_name to mean_values
-#  mean_values$artist_name <- not_in_billboard[i]
-  
-  # Bind the result to the mean_values_df
-#  mean_values_df <- bind_rows(mean_values_df, mean_values)
-#  }}
-#not_in_billboard_features <- left_join(mean_values_df, select(greatest_100_info, name, popularity), by = c("artist_name" = "name"))
-#not_in_billboard_features$genre <- greatest_100_info$genres[greatest_100_info$name %in% not_in_billboard_features$artist_name]
-#not_in_billboard_features <- not_in_billboard_features %>%
-#select("artist_name", "popularity", "genre", everything())
-#features_vs_popularity$genre <- greatest_100_info$genres[greatest_100_info$name %in% features_vs_popularity$artist_name]
-#features_vs_popularity <- features_vs_popularity %>%
-#select("artist_name", "popularity", "genre", everything())
-#write.csv(not_in_billboard_features, "not_in_billboard_features.csv", row.names = FALSE)
-```
+Spotify. (n.d.). Spotify Web API. Retrieved December 27, 2023, from
+<https://developer.spotify.com/documentation/web-api/>
 
-```{r}
-features_vs_popularity <- read.csv("features_vs_popularity.csv")
-not_in_billboard_features<- read.csv("not_in_billboard_features.csv")
-```
+Rolling Stone. (2010, December 3). 100 Greatest Artists: The Beatles,
+Eminem and more of the best of the best. Retrieved December 27, 2023,
+from
+<https://www.rollingstone.com/music/music-lists/100-greatest-artists-147446/jimi-hendrix-5-30413/>
 
-```{r}
-# Function to create a scatter plot with polynomial regression
-create_feature_plot <- function(data, feature, title_suffix) {
-  # Sort the data by the specified feature
-  sorted_data <- data[order(data[[feature]]), ]
-  
-  # Create a scatter plot for the specified feature
-  feature_plot <- plot_ly(sorted_data, 
-                         x = ~get(feature), 
-                         y = ~popularity, 
-                         text = ~artist_name, 
-                         type = "scatter", 
-                         mode = "markers", 
-                         marker = list(size = 10), 
-                         name = "Actual",
-                         showlegend = FALSE)
+Billboard. (n.d.). Billboard Artist 100. Retrieved December 29, 2023,
+from <https://www.billboard.com/charts/artist-100/>
 
-  # Fit a quadratic polynomial regression model for the specified feature
-  poly_model_feature <- lm(popularity ~ poly(sorted_data[[feature]], 2), data = sorted_data)
-  
-  # Generate predicted values from the polynomial model for the specified feature
-  predicted_values_feature <- predict(poly_model_feature, data.frame(energy = sorted_data[[feature]]))
-  
-  # Add polynomial regression line to the plot for the specified feature
-  feature_plot <- feature_plot %>% 
-    add_trace(x = sorted_data[[feature]], 
-              y = predicted_values_feature, 
-              type = "scatter", 
-              mode = 'lines+markers', 
-              line = list(color = "blue"), 
-              name = paste("Predicted", tools::toTitleCase(feature)))
-
-  # Customize layout for the plot
-  layout <- list(xaxis = list(title = tools::toTitleCase(feature)),
-                 yaxis = list(title = "Popularity"))
-  
-  # Apply the layout
-  feature_plot <- feature_plot %>% layout(layout)
-  
-  return(feature_plot)
-}
-
-# Create plots for both billboard and non-billboard data with the "energy" feature
-energy_vs_pop_billboard <- create_feature_plot(features_vs_popularity, "energy", "Billboard")
-energy_vs_pop_notbillboard <- create_feature_plot(not_in_billboard_features, "energy", "Non-Billboard")
-
-# Combine both plots
-energy_vs_pop_combined <- subplot(energy_vs_pop_billboard, energy_vs_pop_notbillboard, nrows = 2, shareX = TRUE, titleX = FALSE, titleY = FALSE, margin = 0.05) %>% layout(title = "Popularity Trends Across Song Energy Levels" , xaxis = list(title = "Energy"), yaxis = list(title = "Popularity"))
-# Show the combined plot
-energy_vs_pop_combined
-
-```
-
-```{r, fig.align="center"}
-# Create plots for both billboard and non-billboard data with the "danceability" feature
-danceability_vs_pop_billboard <- create_feature_plot(features_vs_popularity, "danceability", "Billboard")
-danceability_vs_pop_notbillboard <- create_feature_plot(not_in_billboard_features, "danceability", "Non-Billboard")
-
-# Combine both plots
-danceability_vs_pop_combined <- subplot(danceability_vs_pop_billboard, danceability_vs_pop_notbillboard, nrows = 2, shareX = TRUE, titleX = FALSE, titleY = FALSE, margin = 0.05) %>% layout(title = "Popularity Trends Across Song Danceability Levels" , xaxis = list(title = "Danceability"), yaxis = list(title = "Popularity"))
-# Show the combined plot
-danceability_vs_pop_combined
-```
-
-```{r}
-# Create plots for both billboard and non-billboard data with the "instrumentalness" feature
-instrumentalness_vs_pop_billboard <- create_feature_plot(features_vs_popularity, "instrumentalness", "Billboard")
-instrumentalness_vs_pop_notbillboard <- create_feature_plot(not_in_billboard_features, "instrumentalness", "Non-Billboard")
-
-# Combine both plots
-instrumentalness_vs_pop_combined <- subplot(instrumentalness_vs_pop_billboard, instrumentalness_vs_pop_notbillboard, nrows = 2, shareX = TRUE, titleX = FALSE, titleY = FALSE, margin = 0.05) %>% layout(title = "Popularity Trends Across Song Instrumentalness Level" , xaxis = list(title = "Instrumentalness"), yaxis = list(title = "Popularity"))
-
-# Show the combined plot
-instrumentalness_vs_pop_combined
-```
-
-```{r}
-# Create plots for both billboard and non-billboard data with the "tempo" feature
-tempo_vs_pop_billboard <- create_feature_plot(features_vs_popularity, "tempo", "Billboard")
-tempo_vs_pop_notbillboard <- create_feature_plot(not_in_billboard_features, "tempo", "Non-Billboard")
-
-# Combine both plots
-tempo_vs_pop_combined <- subplot(tempo_vs_pop_billboard, tempo_vs_pop_notbillboard, nrows = 2, shareX = TRUE, titleX = FALSE, titleY = FALSE, margin = 0.05) %>% layout(title = "Popularity Trends Across Song Tempo Level" , xaxis = list(title = "Tempo"), yaxis = list(title = "Popularity"))
-
-# Show the combined plot
-tempo_vs_pop_combined
-```
-
-```{r}
-# Create plots for both billboard and non-billboard data with the "speechiness" feature
-speechiness_vs_pop_billboard <- create_feature_plot(features_vs_popularity, "speechiness", "Billboard")
-speechiness_vs_pop_notbillboard <- create_feature_plot(not_in_billboard_features, "speechiness", "Non-Billboard")
-
-# Combine both plots
-speechiness_vs_pop_combined <- subplot(speechiness_vs_pop_billboard, speechiness_vs_pop_notbillboard, nrows = 2, shareX = TRUE, titleX = FALSE, titleY = FALSE, margin = 0.05) %>% layout(title = "Popularity Trends Across Song Speechiness Level" , xaxis = list(title = "Speechiness"), yaxis = list(title = "Popularity"))
-
-# Show the combined plot
-speechiness_vs_pop_combined
-```
-
-```{r}
-# Create plots for both billboard and non-billboard data with the "acousticness" feature
-acousticness_vs_pop_billboard <- create_feature_plot(features_vs_popularity, "acousticness", "Billboard")
-acousticness_vs_pop_notbillboard <- create_feature_plot(not_in_billboard_features, "acousticness", "Non-Billboard")
-
-# Combine both plots
-acousticness_vs_pop_combined <- subplot(acousticness_vs_pop_billboard, acousticness_vs_pop_notbillboard, nrows = 2, shareX = TRUE, titleX = FALSE, titleY = FALSE, margin = 0.05)%>% layout(title = "Popularity Trends Across Song Acousticness Level" , xaxis = list(title = "Acousticness"), yaxis = list(title = "Popularity"))
-
-# Show the combined plot
-acousticness_vs_pop_combined
-```
-## Appendix: All code in this assignment
+All Music (n.d.) All Music etrieved December 31, 2023, from
+www.allmusic.com \## Appendix: All code in this assignment
 
 ```{r ref.label=knitr::all_labels(), echo=TRUE, eval=FALSE}
 ```
